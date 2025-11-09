@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Google Sheet API Test</title>
+<style>
+  body { font-family: Arial; margin: 20px; }
+  h2 { margin-bottom: 10px; }
+  .controls { margin-bottom: 15px; }
+  input, select, button { margin-right: 10px; padding: 6px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  th { background: #f4f4f4; }
+  .level-0 { background-color: #fff; }
+  .level-1 { background-color: #e6f7ff; }
+  .level-2 { background-color: #ccf2ff; }
+  .level-3 { background-color: #b3ecff; }
+  .level-4 { background-color: #99e6ff; }
+  .level-5 { background-color: #80e0ff; }
+  .level-6 { background-color: #66d9ff; }
+</style>
+</head>
+<body>
+<h2>Kết nối Google Sheet</h2>
+<div class="controls">
+  <input type="text" id="searchInput" placeholder="Tìm từ tiếng Anh...">
+  <select id="topicFilter">
+    <option value="">Tất cả chủ đề</option>
+  </select>
+  <button onclick="loadData()">Tải dữ liệu</button>
+  <button onclick="saveChanges()">Lưu thay đổi</button>
+</div>
+<table id="dataTable">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>English</th>
+      <th>Vietnamese</th>
+      <th>Topic</th>
+      <th>Level</th>
+      <th>Next Review</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbwim3tLgXKyPrLuowpheZpR_FrEpNzfRZM0YEqjEcp-Cm2O7O4eMQri4EchJpK-P_EC/exec";
+let allData = [];
+
+async function loadData() {
+  try {
+    const res = await fetch(API_URL);
+    const json = await res.json();
+    if (!json.success) throw new Error("Không thể tải dữ liệu");
+    allData = json.data;
+    populateTopicFilter();
+    renderTable(allData);
+  } catch (err) {
+    alert("Lỗi: " + err.message);
+  }
+}
+
+function populateTopicFilter() {
+  const topics = [...new Set(allData.map(row => row.topic))];
+  const select = document.getElementById("topicFilter");
+  select.innerHTML = '<option value="">Tất cả chủ đề</option>';
+  topics.forEach(topic => {
+    const opt = document.createElement("option");
+    opt.value = topic;
+    opt.textContent = topic;
+    select.appendChild(opt);
+  });
+}
+
+function renderTable(data) {
+  const tbody = document.querySelector("#dataTable tbody");
+  tbody.innerHTML = "";
+  data.forEach(row => {
+    const tr = document.createElement("tr");
+    tr.className = `level-${row.level || 0}`;
+    tr.innerHTML = `
+      <td>${row.id}</td>
+      <td>${row.english}</td>
+      <td>${row.vietnamese}</td>
+      <td>${row.topic}</td>
+      <td><input type="number" min="0" max="6" value="${row.level || 0}" data-id="${row.id}" data-field="level"></td>
+      <td><input type="date" value="${row.nextReview || ''}" data-id="${row.id}" data-field="nextReview"></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("searchInput").addEventListener("input", filterData);
+document.getElementById("topicFilter").addEventListener("change", filterData);
+
+function filterData() {
+  const search = document.getElementById("searchInput").value.toLowerCase();
+  const topic = document.getElementById("topicFilter").value;
+  const filtered = allData.filter(row => {
+    const matchSearch = row.english.toLowerCase().includes(search);
+    const matchTopic = topic === "" || row.topic === topic;
+    return matchSearch && matchTopic;
+  });
+  renderTable(filtered);
+}
+
+async function saveChanges() {
+  const inputs = document.querySelectorAll("input[data-id]");
+  const payload = {};
+  inputs.forEach(input => {
+    const id = input.dataset.id;
+    const field = input.dataset.field;
+    if (!payload[id]) payload[id] = {};
+    payload[id][field] = input.value;
+  });
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      alert(`Đã cập nhật ${json.updated} từ!`);
+      loadData(); // Tải lại dữ liệu sau khi lưu
+    } else {
+      alert("Lỗi cập nhật: " + json.error);
+    }
+  } catch (err) {
+    alert("Lỗi mạng: " + err.message + "\nHãy chạy qua localhost hoặc deploy lên GitHub Pages.");
+  }
+}
+</script>
+</body>
+</html>
